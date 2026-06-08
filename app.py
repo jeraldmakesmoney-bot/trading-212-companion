@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 import time
 
 # Premium app config
-st.set_page_config(page_title="iOS 26 Quantum Pro", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="iOS 26 Quantum Max", layout="wide", initial_sidebar_state="expanded")
 
 # --- iOS 26 High-Fidelity Style Engine ---
 THEMES = {
@@ -62,19 +62,25 @@ else:
 
 st.sidebar.markdown("---")
 
-# --- CFD Risk & Sizing Engine Widget ---
-st.sidebar.header("🧮 CFD Risk & Sizing Engine")
+# --- UPGRADED: CFD Risk, Stop Loss & Take Profit Sizing Engine Widget ---
+st.sidebar.header("🧮 Advanced Risk Engine")
 account_balance = st.sidebar.number_input("Account Balance ($/£):", min_value=10.0, value=1000.0, step=100.0)
 risk_percentage = st.sidebar.slider("Risk Tolerance per Trade (%):", min_value=0.25, max_value=5.0, value=1.0, step=0.25)
 stop_loss_distance = st.sidebar.number_input("Stop Loss Distance (Points/Cents):", min_value=0.01, value=1.50, step=0.10)
+risk_reward_ratio = st.sidebar.slider("Risk-to-Reward Ratio (Target):", min_value=1.0, max_value=5.0, value=2.0, step=0.5)
 
+# Calculate parameters
 cash_risk = account_balance * (risk_percentage / 100.0)
 exact_position_size = cash_risk / stop_loss_distance
+projected_profit = cash_risk * risk_reward_ratio
+take_profit_distance = stop_loss_distance * risk_reward_ratio
 
 st.sidebar.markdown(f"""
-<div style="background: rgba(10, 132, 255, 0.1); border-radius: 12px; padding: 12px; border: 1px solid rgba(10, 132, 255, 0.2);">
-    <small style="color: gray; display:block;">MAX CASH RISK</small>
-    <b style="font-size: 1.1rem;">${cash_risk:.2f}</b>
+<div style="background: rgba(10, 132, 255, 0.1); border-radius: 12px; padding: 12px; border: 1px solid rgba(10, 132, 255, 0.2); margin-bottom: 10px;">
+    <small style="color: gray; display:block;">MAX RISK (STOP LOSS)</small>
+    <b style="font-size: 1.1rem; color: #ff453a;">-${cash_risk:.2f}</b>
+    <small style="color: gray; display:block; margin-top: 6px;">TARGET REWARD (TAKE PROFIT)</small>
+    <b style="font-size: 1.1rem; color: #30d158;">+${projected_profit:.2f}</b>
     <small style="color: gray; display:block; margin-top: 6px;">SUGGESTED CFD POSITION SIZE</small>
     <b style="font-size: 1.1rem; color: #0a84ff;">{exact_position_size:.2f} Units</b>
 </div>
@@ -138,27 +144,22 @@ for i, ticker in enumerate(tickers):
             df['MACD'] = df['EMA_12'] - df['EMA_26']
             df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean()
             
-            # --- UPGRADE 1: Native VWAP (Volume Weighted Average Price) Math ---
+            # Native VWAP Math
             if 'Volume' in df.columns and df['Volume'].sum() > 0:
                 typical_price = (df['High'] + df['Low'] + df['Close']) / 3
                 df['VWAP'] = (typical_price * df['Volume']).cumsum() / df['Volume'].cumsum()
                 latest_vwap = df['VWAP'].iloc[-1]
                 vwap_str = f"${latest_vwap:.2f}" if "=X" not in ticker else "N/A"
             else:
-                df['VWAP'] = df['Close'] # Fallback
+                df['VWAP'] = df['Close']
                 vwap_str = "N/A (No Vol)"
 
-            # --- UPGRADE 2: Native ATR (Average True Range) Trailing Stop Math ---
+            # Native ATR Math
             high_low = df['High'] - df['Low']
             high_cp = (df['High'] - df['Close'].shift()).abs()
             low_cp = (df['Low'] - df['Close'].shift()).abs()
             tr = pd.concat([high_low, high_cp, low_cp], axis=1).max(axis=1)
             df['ATR'] = tr.ewm(span=14, adjust=False).mean()
-            
-            latest_atr = df['ATR'].iloc[-1]
-            latest_close = df['Close'].iloc[-1]
-            # 2x ATR is standard trailing cushion for stops
-            suggested_stop_distance = latest_atr * 2.0 
             
             latest = df.iloc[-1]
             prev = df.iloc[-2]
@@ -173,29 +174,37 @@ for i, ticker in enumerate(tickers):
             sig_1h = calculate_tf_signal(ticker, "1h", "1mo")
             sig_1d = calculate_tf_signal(ticker, "1d", "1y")
             
-            # Strategy execution rules (Now incorporating VWAP filters)
+            # Strategy execution rules
             ema_buy = prev['EMA_9'] <= prev['EMA_21'] and latest['EMA_9'] > latest['EMA_21']
             macd_buy = macd > macd_sig
-            vwap_buy_filter = price > latest['VWAP'] # Only buy if price is above VWAP institutional average
+            vwap_buy_filter = price > latest['VWAP']
             
             ema_sell = prev['EMA_9'] >= prev['EMA_21'] and latest['EMA_9'] < latest['EMA_21']
             macd_sell = macd < macd_sig
             vwap_sell_filter = price < latest['VWAP']
 
+            # --- DYNAMIC TARGET CALCULATOR LOGIC ---
+            active_trade = False
+            sl_level = 0.0
+            tp_level = 0.0
+
             if (ema_buy and macd_buy and vwap_buy_filter) or rsi_val < 35:
                 status_color = "green"
                 status_text = "EXECUTE BUY 🟢"
                 trigger_audio = True
-                stop_loss_price = price - suggested_stop_distance
+                active_trade = True
+                sl_level = price - stop_loss_distance
+                tp_level = price + take_profit_distance
             elif (ema_sell and macd_sell and vwap_sell_filter) or rsi_val > 65:
                 status_color = "red"
                 status_text = "EXECUTE SELL 🔴"
                 trigger_audio = True
-                stop_loss_price = price + suggested_stop_distance
+                active_trade = True
+                sl_level = price + stop_loss_distance
+                tp_level = price - take_profit_distance
             else:
                 status_color = "orange" if "Light" in selected_theme else "gray"
                 status_text = "MARKET NEUTRAL ⏳"
-                stop_loss_price = 0.0
             
             display_price = f"{price:.4f}" if "=X" in ticker else f"${price:,.2f}"
             st.metric(label=f"Primary Close ({primary_interval})", value=display_price)
@@ -209,10 +218,13 @@ for i, ticker in enumerate(tickers):
             </div>
             """, unsafe_allow_html=True)
             
-            # Protective Volatility Data Card
-            stop_display = f"${stop_loss_price:.2f}" if stop_loss_price > 0 else "No Active Trade"
-            st.markdown(f"**ATR Smart Stop Price:** `{stop_display}`")
-            st.markdown(f"**VWAP Level:** `{vwap_str}`")
+            # Render Protective Levels Text block
+            if active_trade:
+                st.markdown(f"🎯 **Target Profit (TP):** `{tp_level:.4f if '=X' in ticker else f'${tp_level:.2f}'}`")
+                st.markdown(f"🛡️ **Stop Loss (SL):** `{sl_level:.4f if '=X' in ticker else f'${sl_level:.2f}'}`")
+            else:
+                st.markdown("🎯 **Target Profit (TP):** `No active signal`")
+                st.markdown("🛡️ **Stop Loss (SL):** `No active signal`")
             
             # --- Smooth Candlestick Canvas Rendering ---
             fig = go.Figure()
@@ -223,39 +235,43 @@ for i, ticker in enumerate(tickers):
             fig.add_trace(go.Scatter(x=df.index, y=df['EMA_9'], mode='lines', name='EMA 9', line=dict(color=theme['ema9'], width=1.5)))
             fig.add_trace(go.Scatter(x=df.index, y=df['EMA_21'], mode='lines', name='EMA 21', line=dict(color=theme['ema21'], width=1.5)))
             
-            # Only graph VWAP if volume data exists
             if 'Volume' in df.columns and df['Volume'].sum() > 0:
                 fig.add_trace(go.Scatter(x=df.index, y=df['VWAP'], mode='lines', name='VWAP', line=dict(color='orange', width=1, dash='dash')))
             
+            # --- NEW: Visual Stop Loss and Take Profit lines drawn onto the canvas ---
+            if active_trade:
+                # Take Profit Line (Green/Emerald tint)
+                fig.add_hline(y=tp_level, line_dash="dash", line_color="#30d158", line_width=2, 
+                             annotation_text="TAKE PROFIT (TP)", annotation_position="top left")
+                # Stop Loss Line (Red/Crimson tint)
+                fig.add_hline(y=sl_level, line_dash="dash", line_color="#ff453a", line_width=2, 
+                             annotation_text="STOP LOSS (SL)", annotation_position="bottom left")
+
             fig.update_layout(
-                height=220, margin=dict(l=0, r=0, t=5, b=0), xaxis_rangeslider_visible=False, showlegend=False,
+                height=240, margin=dict(l=0, r=0, t=5, b=0), xaxis_rangeslider_visible=False, showlegend=False,
                 paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
                 xaxis=dict(showgrid=False, tickfont=dict(color='gray', size=9)),
                 yaxis=dict(showgrid=True, gridcolor=theme['grid'], tickfont=dict(color='gray', size=9))
             )
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
             
-            # --- UPGRADE 3: Native Historical Backtesting Algorithm Matrix ---
+            # Historical Backtesting Algorithm Matrix
             st.markdown("---")
             if st.button(f"📊 Run Backtest Strategy on {clean_name}", key=f"bt_{ticker}"):
                 with st.spinner("Processing historical backtest data..."):
-                    # Pull a larger 1-year historic block to run simulations
                     bt_df = ticker_obj.history(period="1y", interval="1d")
                     if len(bt_df) > 30:
                         bt_df['EMA_9'] = bt_df['Close'].ewm(span=9, adjust=False).mean()
                         bt_df['EMA_21'] = bt_df['Close'].ewm(span=21, adjust=False).mean()
-                        
-                        # Generate simple historic signal map
                         bt_df['Signal'] = np.where(bt_df['EMA_9'] > bt_df['EMA_21'], 1, 0)
                         bt_df['Position'] = bt_df['Signal'].diff()
                         
-                        # Calculate results
                         trades = []
                         entry_price = 0
                         for idx, row in bt_df.iterrows():
-                            if row['Position'] == 1: # Buy Entry
+                            if row['Position'] == 1: 
                                 entry_price = row['Close']
-                            elif row['Position'] == -1 and entry_price != 0: # Sell Close
+                            elif row['Position'] == -1 and entry_price != 0: 
                                 exit_price = row['Close']
                                 pnl = (exit_price - entry_price) / entry_price
                                 trades.append(pnl)
@@ -268,7 +284,7 @@ for i, ticker in enumerate(tickers):
                             st.markdown(f"📈 Total Returns: `{total_return:.1f}%`")
                             st.markdown(f"🎯 Win Rate: `{win_rate:.1f}%` ({len(trades)} trades)")
                         else:
-                            st.info("No definitive strategy crossings in historical period range.")
+                            st.info("No definitive strategy crossings found.")
                     else:
                         st.error("Insufficient historical bar data to compile backtest matrices.")
                         
