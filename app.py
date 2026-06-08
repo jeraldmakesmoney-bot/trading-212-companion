@@ -3,75 +3,109 @@ import yfinance as yf
 import pandas as pd
 import time
 
-# Dashboard adjustments for monitor layout
-st.set_page_config(page_title="CFD Companion", layout="wide")
-st.title("📊 Trading 212 CFD Signal Companion")
-st.caption("Auto-refreshes every 15 seconds to monitor technical setups live.")
+st.set_page_config(page_title="Pro CFD Dashboard", layout="wide")
+st.title("🦅 Pro Trading 212 CFD Monitor")
+st.caption("Live monitoring multiple assets. Auto-refreshes every 15 seconds.")
 
-# Sidebar controls 
-st.sidebar.header("Controls")
-ticker_input = st.sidebar.text_input("Stock Ticker (e.g., AAPL, TSLA, NVDA):", "AAPL").upper()
+# 1. Multi-Ticker Watchlist Sidebar
+st.sidebar.header("Watchlist Settings")
+watchlist_input = st.sidebar.text_input(
+    "Enter Tickers (separated by commas):", 
+    "AAPL, TSLA, NVDA, EURUSD=X"
+)
 interval = st.sidebar.selectbox("Timeframe:", ["5m", "15m", "1h", "1d"], index=1)
+
+# Clean up the input string into a Python list
+tickers = [t.strip().upper() for t in watchlist_input.split(",")]
 
 period_map = {"5m": "1d", "15m": "5d", "1h": "1mo", "1d": "1y"}
 period = period_map[interval]
 
-if ticker_input:
-    try:
-        # Fetch clean market data
-        ticker_obj = yf.Ticker(ticker_input)
-        df = ticker_obj.history(period=period, interval=interval)
-        
-        if df.empty:
-            st.error(f"No data found for '{ticker_input}'.")
-        else:
-            # Calculate Indicators
+# Track if any action-worthy signal triggers to sound the alert
+trigger_audio = False
+
+# Layout the grid based on how many tickers are chosen
+cols = st.columns(len(tickers))
+
+for i, ticker in enumerate(tickers):
+    with cols[i]:
+        st.subheader(f"📈 {ticker}")
+        try:
+            df = yf.Ticker(ticker).history(period=period, interval=interval)
+            if df.empty:
+                st.error("No data")
+                continue
+                
+            # --- Technical Indicators ---
+            # EMAs
             df['EMA_9'] = df['Close'].ewm(span=9, adjust=False).mean()
             df['EMA_21'] = df['Close'].ewm(span=21, adjust=False).mean()
             
+            # RSI
             delta = df['Close'].diff()
             gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
             loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
             rs = gain / (loss + 1e-10)
             df['RSI'] = 100 - (100 / (1 + rs))
             
+            # MACD Upgrade
+            df['EMA_12'] = df['Close'].ewm(span=12, adjust=False).mean()
+            df['EMA_26'] = df['Close'].ewm(span=26, adjust=False).mean()
+            df['MACD'] = df['EMA_12'] - df['EMA_26']
+            df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean()
+            
+            # Latest data dataframes
             latest = df.iloc[-1]
             prev = df.iloc[-2]
             
-            current_price = float(latest['Close'])
-            rsi_val = float(latest['RSI'])
-            ema9_now, ema21_now = float(latest['EMA_9']), float(latest['EMA_21'])
-            ema9_prev, ema21_prev = float(prev['EMA_9']), float(prev['EMA_21'])
+            # Extract current values
+            price = float(latest['Close'])
+            rsi = float(latest['RSI'])
+            macd, macd_sig = float(latest['MACD']), float(latest['Signal_Line'])
             
-            # Simple technical rules
-            buy_condition = (ema9_prev <= ema21_prev and ema9_now > ema21_now) or (rsi_val < 30)
-            sell_condition = (ema9_prev >= ema21_prev and ema9_now < ema21_now) or (rsi_val > 70)
+            # --- Upgraded Trend Rules ---
+            ema_buy = prev['EMA_9'] <= prev['EMA_21'] and latest['EMA_9'] > latest['EMA_21']
+            macd_buy = macd > macd_sig
+            rsi_oversold = rsi < 35
             
-            if buy_condition and not sell_condition:
-                signal_text = "BUY 🟢"
-                explanation = "Short-term momentum turned upward or asset is oversold."
-            elif sell_condition and not buy_condition:
-                signal_text = "SELL 🔴"
-                explanation = "Short-term momentum turned downward or asset is overbought."
-            else:
-                signal_text = "HOLD ⏳"
-                explanation = "Indicators are resting in neutral territory."
-            
-            # Display results via text columns
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Current Price", f"${current_price:.2f}")
-            col2.metric("RSI (14)", f"{rsi_val:.1f}")
-            col3.metric("Action Verdict", signal_text)
-            
-            st.info(f"**Why this signal?** {explanation}")
-            
-            # Render visual line chart
-            st.subheader(f"Price Action ({interval})")
-            st.line_chart(df[['Close', 'EMA_9', 'EMA_21']])
-            
-    except Exception as e:
-        st.error(f"Error fetching ticker: {e}")
+            ema_sell = prev['EMA_9'] >= prev['EMA_21'] and latest['EMA_9'] < latest['EMA_21']
+            macd_sell = macd < macd_sig
+            rsi_overbought = rsi > 65
 
-# Cloud auto-refresh loop
+            # Execute Signals
+            if (ema_buy and macd_buy) or rsi_oversold:
+                status = "BUY 🟢"
+                trigger_audio = True
+            elif (ema_sell and macd_sell) or rsi_overbought:
+                status = "SELL 🔴"
+                trigger_audio = True
+            else:
+                status = "HOLD ⏳"
+            
+            # Display stats cleanly
+            st.metric("Price", f"${price:.2f}" if "X" not in ticker else f"{price:.4f}")
+            st.write(f"**RSI:** {rsi:.1f}")
+            st.write(f"**Verdict:** {status}")
+            
+            # Micro-chart for space saving in grids
+            st.line_chart(df['Close'], height=150)
+            
+        except Exception as e:
+            st.error("Error")
+
+# 2. Audio Alert Upgrade
+# If a signal triggers, inject a hidden HTML audio element to play a chime
+if trigger_audio:
+    st.components.v1.html(
+        """
+        <audio autoplay style="display:none;">
+            <source src="https://assets.mixkit.co/active_storage/sfx/2869/2869-500.wav" type="audio/wav">
+        </audio>
+        """,
+        height=0
+    )
+
+# Refresh Loop
+time.write("") # Blank space holder
 time.sleep(15)
 st.rerun()
