@@ -4,10 +4,10 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 
-# Premium app config
-st.set_page_config(page_title="iOS 26 Quantum State Desk", layout="wide", initial_sidebar_state="expanded")
+# Initialize an elite, wide-screen Apple ecosystem layout
+st.set_page_config(page_title="iOS 26 Quantum Turbo Max", layout="wide", initial_sidebar_state="expanded")
 
-# --- iOS 26 High-Fidelity Style Engine ---
+# --- UI Styling Engine ---
 THEMES = {
     "📱 iOS 26 Cosmic Dark": {
         "bg_css": "body { background: radial-gradient(circle at top right, #0d0d12, #161622); color: #f5f5f7; font-family: -apple-system, BlinkMacSystemFont, sans-serif; } [data-testid='stMetricValue'] { color: #ffffff !important; font-weight: 700; font-size: 2.0rem !important; }",
@@ -21,23 +21,25 @@ THEMES = {
     }
 }
 
-st.sidebar.header("🕹️ OS Controls")
-selected_theme = st.sidebar.selectbox("Matrix Style:", list(THEMES.keys()))
+st.sidebar.header("🕹️ Workspace Configurations")
+selected_theme = st.sidebar.selectbox("Display Theme:", list(THEMES.keys()))
 theme = THEMES[selected_theme]
 st.markdown(f"<style>{theme['bg_css']}</style>", unsafe_allow_html=True)
 
-if st.sidebar.button("🔄 Force Market Scan", use_container_width=True):
+# Instant Cache Clear Button to force an immediate data sync
+if st.sidebar.button("🔄 Force Fresh Market Scan", use_container_width=True):
     st.cache_data.clear()
 
 st.sidebar.markdown("---")
 
-# --- Position Risk Engine ---
-st.sidebar.header("🧮 Position Risk Engine")
-account_balance = st.sidebar.number_input("Account Balance:", min_value=10.0, value=1000.0, step=100.0)
-risk_percentage = st.sidebar.slider("Risk per Trade (%):", min_value=0.25, max_value=5.0, value=1.0, step=0.25)
-stop_loss_distance = st.sidebar.number_input("Stop Distance (Points/Cents):", min_value=0.01, value=1.00, step=0.10)
-risk_reward_ratio = st.sidebar.slider("Risk:Reward Ratio Target:", min_value=1.0, max_value=5.0, value=2.0, step=0.5)
+# --- Risk Calculator Panel ---
+st.sidebar.header("🧮 Position Sizing Calculator")
+account_balance = st.sidebar.number_input("Trading Balance:", min_value=10.0, value=1000.0, step=100.0)
+risk_percentage = st.sidebar.slider("Cash Risk Per Trade (%):", min_value=0.25, max_value=5.0, value=1.0, step=0.25)
+stop_loss_distance = st.sidebar.number_input("Stop Loss Size (Points or Cents):", min_value=0.01, value=1.00, step=0.10)
+risk_reward_ratio = st.sidebar.slider("Risk to Reward Ratio Target:", min_value=1.0, max_value=5.0, value=2.0, step=0.5)
 
+# Calculate Risk Math
 cash_risk = account_balance * (risk_percentage / 100.0)
 exact_position_size = cash_risk / stop_loss_distance
 projected_profit = cash_risk * risk_reward_ratio
@@ -45,32 +47,34 @@ take_profit_distance = stop_loss_distance * risk_reward_ratio
 
 st.sidebar.markdown(f"""
 <div style="background: rgba(10, 132, 255, 0.1); border-radius: 12px; padding: 12px; border: 1px solid rgba(10, 132, 255, 0.2);">
-    <small style="color: gray; display:block;">MAX RISK LIMIT</small>
+    <small style="color: gray; display:block;">MAX TRADING RISK</small>
     <b style="font-size: 1.1rem; color: #ff453a;">-${cash_risk:.2f}</b><br>
-    <small style="color: gray; display:block; margin-top: 6px;">TARGET REWARD</small>
+    <small style="color: gray; display:block; margin-top: 6px;">POTENTIAL TARGET PROFIT</small>
     <b style="font-size: 1.1rem; color: #30d158;">+${projected_profit:.2f}</b><br>
-    <small style="color: gray; display:block; margin-top: 6px;">CFD POSITION SIZE</small>
+    <small style="color: gray; display:block; margin-top: 6px;">SUGGESTED CFD POSITION SIZE</small>
     <b style="font-size: 1.1rem; color: #0a84ff;">{exact_position_size:.2f} Units</b>
 </div>
 """, unsafe_allow_html=True)
 
 st.sidebar.markdown("---")
-primary_interval = st.sidebar.selectbox("Analysis Interval:", ["5m", "15m", "1h", "1d"], index=1)
+primary_interval = st.sidebar.selectbox("Chart Timeframe:", ["5m", "15m", "1h", "1d"], index=1)
 period_map = {"5m": "5d", "15m": "5d", "1h": "1mo", "1d": "1y"}
 primary_period = period_map[primary_interval]
 
-# Master screening watch list
+# Target Assets Array
 SCREENER_POOL = ["AAPL", "TSLA", "NVDA", "MSFT", "AMZN", "GOOGL", "META", "AMD", "EURUSD=X", "GBPUSD=X", "BTC-USD"]
 
+# --- High-Velocity Parallel API Engine ---
 @st.cache_data(ttl=15)
 def fetch_all_market_data(tickers, period, interval):
     try:
-        data = yf.download(tickers=tickers, period=period, interval=interval, group_by='ticker', auto_adjust=True)
-        return data
+        # Bundles all asset downloads into one single parallel network transmission
+        return yf.download(tickers=tickers, period=period, interval=interval, group_by='ticker', auto_adjust=True)
     except:
         return pd.DataFrame()
 
-def calculate_adx_fast(df, period=14):
+# Clean, Optimized Math Pipeline for ADX Calculation
+def calculate_adx_clean(df, period=14):
     df = df.copy()
     df['H-L'] = df['High'] - df['Low']
     df['H-Cp'] = (df['High'] - df['Close'].shift(1)).abs()
@@ -89,155 +93,172 @@ def calculate_adx_fast(df, period=14):
     df['plus_DI'] = 100 * (df['plus_DM_smooth'] / (df['TR_smooth'] + 1e-10))
     df['minus_DI'] = 100 * (df['minus_DM_smooth'] / (df['TR_smooth'] + 1e-10))
     df['DX'] = 100 * (df['plus_DI'] - df['minus_DI']).abs() / (df['plus_DI'] + df['minus_DI'] + 1e-10)
-    df['ADX'] = df['DX'].ewm(alpha=1/period, adjust=False).mean()
-    return df['ADX']
+    return df['DX'].ewm(alpha=1/period, adjust=False).mean()
 
-st.title(" Quantum Automated Radar & Screener")
-st.caption(f"Engine Profile: **{selected_theme}** // Mode: Active Regime Tracking")
+# Header Canvas
+st.title(" Quantum Unified Signal Engine")
+st.caption(f"System State: Operational // Timeframe Target: {primary_interval}")
 st.markdown("---")
 
-st.subheader("🕵️‍♂️ Real-Time Asset Screening Radar")
-
+# Download market data immediately
 batch_data = fetch_all_market_data(SCREENER_POOL, primary_period, primary_interval)
-screener_results = []
 
-if not batch_data.empty:
-    for ticker in SCREENER_POOL:
-        try:
-            if ticker in batch_data.columns.levels[0]:
+# --- WORKSPACE ARCHITECTURE: CLEAN TABS ---
+tab_radar, tab_chart = st.tabs(["🦅 Global Market Radar", "🔬 Interactive Chart Deep-Dive"])
+
+# ================= TAB 1: RADAR =================
+with tab_radar:
+    st.subheader("Asset Pulse Matrix")
+    screener_results = []
+
+    if not batch_data.empty:
+        for ticker in SCREENER_POOL:
+            try:
+                if ticker not in batch_data.columns.levels[0]:
+                    continue
                 df = batch_data[ticker].dropna(how='all')
-            else:
-                continue
+                if len(df) < 22:
+                    continue
                 
-            if len(df) < 22:
-                continue
+                # Math Processing
+                df['EMA_9'] = df['Close'].ewm(span=9, adjust=False).mean()
+                df['EMA_21'] = df['Close'].ewm(span=21, adjust=False).mean()
+                df['ADX'] = calculate_adx_clean(df)
                 
-            df['EMA_9'] = df['Close'].ewm(span=9, adjust=False).mean()
-            df['EMA_21'] = df['Close'].ewm(span=21, adjust=False).mean()
-            df['ADX'] = calculate_adx_fast(df)
-            
-            if 'Volume' in df.columns and df['Volume'].sum() > 0:
-                typical_price = (df['High'] + df['Low'] + df['Close']) / 3
-                df['VWAP'] = (typical_price * df['Volume']).cumsum() / df['Volume'].cumsum()
-            else:
-                df['VWAP'] = df['Close']
-
-            latest = df.iloc[-1]
-            price = latest['Close']
-            adx_val = latest['ADX']
-            
-            # UPGRADED: Continuous State Checks (No longer waiting for instantaneous cross)
-            is_bullish_trend = latest['EMA_9'] > latest['EMA_21']
-            is_bearish_trend = latest['EMA_9'] < latest['EMA_21']
-            above_vwap = price > latest['VWAP']
-            below_vwap = price < latest['VWAP']
-            
-            # Smooth out Chop Filter to 20
-            if adx_val < 20:
-                regime = "⚠️ Weak Trend / Chop"
-                if is_bullish_trend:
-                    verdict = "🟡 BULLISH BIAS (Low Vol)"
+                if 'Volume' in df.columns and df['Volume'].sum() > 0:
+                    tp = (df['High'] + df['Low'] + df['Close']) / 3
+                    df['VWAP'] = (tp * df['Volume']).cumsum() / df['Volume'].cumsum()
                 else:
-                    verdict = "🟡 BEARISH BIAS (Low Vol)"
-            else:
-                regime = "⚡ Strong Trend Active"
-                if is_bullish_trend and above_vwap:
-                    verdict = "🟢 BULLISH REGIME"
-                elif is_bearish_trend and below_vwap:
-                    verdict = "🔴 BEARISH REGIME"
+                    df['VWAP'] = df['Close']
+
+                latest = df.iloc[-1]
+                price = latest['Close']
+                adx_val = latest['ADX']
+                
+                # State Analytics Engine
+                is_bullish = latest['EMA_9'] > latest['EMA_21']
+                above_vwap = price > latest['VWAP']
+                
+                if adx_val < 20:
+                    structure = "⚠️ Sideways Chop Zone"
+                    verdict = "🟡 BULLISH REGIME (Low Vol)" if is_bullish else "🟡 BEARISH REGIME (Low Vol)"
                 else:
-                    verdict = "⏳ Neutral Consolidation"
-                    
-            screener_results.append({
-                "Asset": ticker,
-                "Price": f"${price:,.2f}" if "=X" not in ticker else f"{price:.4f}",
-                "Trend Power (ADX)": f"{adx_val:.1f}",
-                "Market Structure": regime,
-                "System Action": verdict
-            })
-        except:
-            continue
+                    structure = "⚡ Clean Trending Market"
+                    if is_bullish and above_vwap:
+                        verdict = "🟢 STRONGLY BULLISH"
+                    elif not is_bullish and not above_vwap:
+                        verdict = "🔴 STRONGLY BEARISH"
+                    else:
+                        verdict = "⏳ Mixed Consolidation"
+                
+                screener_results.append({
+                    "Market Ticker": ticker,
+                    "Current Price": f"${price:,.2f}" if "=X" not in ticker else f"{price:.4f}",
+                    "Trend Power (ADX)": f"{adx_val:.1f}",
+                    "Market Structure": structure,
+                    "Real-Time State": verdict
+                })
+            except:
+                continue
 
-if screener_results:
-    screener_df = pd.DataFrame(screener_results)
-    st.dataframe(screener_df, use_container_width=True, hide_index=True)
-else:
-    st.warning("No market asset branches synchronized.")
+    if screener_results:
+        st.dataframe(pd.DataFrame(screener_results), use_container_width=True, hide_index=True)
+    else:
+        st.warning("Awaiting initial data sync package.")
 
-st.markdown("---")
-
-# --- Focus Viewport Selection ---
-st.subheader("🔍 Deep-Dive Diagnostic Canvas")
-focus_ticker = st.selectbox("Select screened asset to chart and pull risk targets:", SCREENER_POOL)
-
-if focus_ticker and not batch_data.empty and focus_ticker in batch_data.columns.levels[0]:
-    df_focus = batch_data[focus_ticker].dropna(how='all')
-    if len(df_focus) >= 22:
-        df_focus['EMA_9'] = df_focus['Close'].ewm(span=9, adjust=False).mean()
-        df_focus['EMA_21'] = df_focus['Close'].ewm(span=21, adjust=False).mean()
-        df_focus['ADX'] = calculate_adx_fast(df_focus)
-        
-        if 'Volume' in df_focus.columns and df_focus['Volume'].sum() > 0:
-            typical_price = (df_focus['High'] + df_focus['Low'] + df_focus['Close']) / 3
-            df_focus['VWAP'] = (typical_price * df_focus['Volume']).cumsum() / df_focus['Volume'].cumsum()
-        else:
-            df_focus['VWAP'] = df_focus['Close']
-
-        latest_f = df_focus.iloc[-1]
-        price_f = float(latest_f['Close'])
-        adx_f = float(latest_f['ADX'])
-        
-        # Focus View State Checks
-        is_bull_f = latest_f['EMA_9'] > latest_f['EMA_21']
-        is_bear_f = latest_f['EMA_9'] < latest_f['EMA_21']
-        above_vwap_f = price_f > latest_f['VWAP']
-        below_vwap_f = price_f < latest_f['VWAP']
-        
-        active_trade = True  # Always calculate targets if a directional bias exists!
-        sl_level, tp_level = 0.0, 0.0
-        
-        if is_bull_f:
-            direction_text = "🟢 ACTIVE BULLISH BIAS"
-            sl_level, tp_level = price_f - stop_loss_distance, price_f + take_profit_distance
-        else:
-            direction_text = "🔴 ACTIVE BEARISH BIAS"
-            sl_level, tp_level = price_f + stop_loss_distance, price_f - take_profit_distance
-
-        # UI Rendering
-        st.markdown(f'<div style="{theme["card_style"]}">', unsafe_allow_html=True)
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            st.metric("Focus Price", f"${price_f:,.2f}" if "=X" not in focus_ticker else f"{price_f:.4f}")
-        with c2:
-            st.metric("ADX Power Metric", f"{adx_f:.1f}")
-        with c3:
-            if adx_f < 20:
-                st.warning("⚠️ CHOP REGIME (Trade Carefully)")
+# ================= TAB 2: INTERACTIVE CHARTS =================
+with tab_chart:
+    st.subheader("Advanced Analysis Workspace")
+    focus_ticker = st.selectbox("Select Asset to Map:", SCREENER_POOL)
+    
+    if focus_ticker and not batch_data.empty and focus_ticker in batch_data.columns.levels[0]:
+        df_focus = batch_data[focus_ticker].dropna(how='all')
+        if len(df_focus) >= 22:
+            df_focus['EMA_9'] = df_focus['Close'].ewm(span=9, adjust=False).mean()
+            df_focus['EMA_21'] = df_focus['Close'].ewm(span=21, adjust=False).mean()
+            df_focus['ADX'] = calculate_adx_clean(df_focus)
+            
+            if 'Volume' in df_focus.columns and df_focus['Volume'].sum() > 0:
+                tp = (df_focus['High'] + df_focus['Low'] + df_focus['Close']) / 3
+                df_focus['VWAP'] = (tp * df_focus['Volume']).cumsum() / df_focus['Volume'].cumsum()
             else:
-                st.success("🔓 TREND REGIME UNLOCKED")
+                df_focus['VWAP'] = df_focus['Close']
 
-        st.markdown(f"📊 **Current Vector State:** `{direction_text}`")
-        st.markdown(f"🎯 **Target Profit (TP) Level:** `{tp_level:.4f}`")
-        st.markdown(f"🛡️ **Stop Loss (SL) Level:** `{sl_level:.4f}`")
+            latest_f = df_focus.iloc[-1]
+            price_f = float(latest_f['Close'])
+            adx_f = float(latest_f['ADX'])
+            
+            is_bull_f = latest_f['EMA_9'] > latest_f['EMA_21']
+            
+            # Risk coordinate mapper
+            if is_bull_f:
+                direction_label = "🟢 BULLISH STRUCTURE ACTIVE"
+                sl_level = price_f - stop_loss_distance
+                tp_level = price_f + take_profit_distance
+            else:
+                direction_label = "🔴 BEARISH STRUCTURE ACTIVE"
+                sl_level = price_f + stop_loss_distance
+                tp_level = price_f - take_profit_distance
 
-        # Plotly Engine Canvas
-        fig = go.Figure()
-        fig.add_trace(go.Candlestick(
-            x=df_focus.index, open=df_focus['Open'], high=df_focus['High'], low=df_focus['Low'], close=df_focus['Close'],
-            increasing_line_color=theme['down_color'], decreasing_line_color=theme['up_color'], name="Price"
-        ))
-        fig.add_trace(go.Scatter(x=df_focus.index, y=df_focus['EMA_9'], mode='lines', line=dict(color=theme['ema9'], width=1.5), name="EMA 9"))
-        fig.add_trace(go.Scatter(x=df_focus.index, y=df_focus['EMA_21'], mode='lines', line=dict(color=theme['ema21'], width=1.5), name="EMA 21"))
-        fig.add_trace(go.Scatter(x=df_focus.index, y=df_focus['VWAP'], mode='lines', line=dict(color='orange', width=1, dash='dash'), name="VWAP"))
-        
-        # Always draw the visual lines so your screen stays populated with real data
-        fig.add_hline(y=tp_level, line_dash="dash", line_color="#30d158", line_width=2, annotation_text="TP Target")
-        fig.add_hline(y=sl_level, line_dash="dash", line_color="#ff453a", line_width=2, annotation_text="SL Target")
+            # Render Asset Profile Card
+            st.markdown(f'<div style="{theme["card_style"]}">', unsafe_allow_html=True)
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.metric("Live Execution Quote", f"${price_f:,.2f}" if "=X" not in focus_ticker else f"{price_f:.4f}")
+            with c2:
+                st.metric("Trend Strength (ADX)", f"{adx_f:.1f}")
+            with c3:
+                st.metric("Structural Mode", direction_label)
+            
+            # Live Metrics Readout
+            st.markdown(f"🎯 **Automatic Profit Target (TP):** `{tp_level:.4f}` | 🛡️ **Automatic Stop Loss (SL):** `{sl_level:.4f}`")
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            # --- HYPER-REACTIVE CHART CONTROLS ---
+            st.markdown("##### 🛠️ Live Chart Layers")
+            cc1, cc2, cc3 = st.columns(3)
+            with cc1:
+                toggle_emas = st.checkbox("Show Moving Averages (9 & 21 EMA)", value=True)
+            with cc2:
+                toggle_vwap = st.checkbox("Show Institutional Volume Price (VWAP)", value=True)
+            with cc3:
+                toggle_risk = st.checkbox("Show Target & Stop Lines (TP/SL)", value=True)
+            
+            # Canvas Construct
+            fig = go.Figure()
+            
+            # Candlesticks Base
+            fig.add_trace(go.Candlestick(
+                x=df_focus.index, open=df_focus['Open'], high=df_focus['High'], low=df_focus['Low'], close=df_focus['Close'],
+                increasing_line_color=theme['down_color'], decreasing_line_color=theme['up_color'], name="Price Candle"
+            ))
+            
+            # Reactive Layer: EMAs
+            if toggle_emas:
+                fig.add_trace(go.Scatter(x=df_focus.index, y=df_focus['EMA_9'], mode='lines', line=dict(color=theme['ema9'], width=1.5), name="9 Period EMA"))
+                fig.add_trace(go.Scatter(x=df_focus.index, y=df_focus['EMA_21'], mode='lines', line=dict(color=theme['ema21'], width=1.5), name="21 Period EMA"))
+            
+            # Reactive Layer: VWAP
+            if toggle_vwap:
+                fig.add_trace(go.Scatter(x=df_focus.index, y=df_focus['VWAP'], mode='lines', line=dict(color='orange', width=1.2, dash='dash'), name="VWAP Line"))
+            
+            # Reactive Layer: Targets
+            if toggle_risk:
+                fig.add_hline(y=tp_level, line_dash="solid", line_color="#30d158", line_width=1.5, annotation_text="Profit Target")
+                fig.add_hline(y=sl_level, line_dash="solid", line_color="#ff453a", line_width=1.5, annotation_text="Risk Boundary")
 
-        fig.update_layout(
-            height=320, margin=dict(l=0, r=0, t=5, b=0), xaxis_rangeslider_visible=False,
-            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-            xaxis=dict(showgrid=False), yaxis=dict(showgrid=True, gridcolor=theme['grid'])
-        )
-        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-        st.markdown('</div>', unsafe_allow_html=True)
+            # High-Fidelity Reactive UI Configurations
+            fig.update_layout(
+                height=450,
+                margin=dict(l=10, r=10, t=10, b=10),
+                xaxis_rangeslider_visible=False,
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                xaxis=dict(showgrid=False),
+                yaxis=dict(showgrid=True, gridcolor=theme['grid']),
+                hovermode="x unified", # Hyper-reactive crosshair tracking across the time axis
+                showlegend=True
+            )
+            
+            # Render chart onto screen with full interactives unlocked
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': True})
