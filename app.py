@@ -5,7 +5,7 @@ import numpy as np
 import plotly.graph_objects as go
 
 # Premium app config
-st.set_page_config(page_title="iOS 26 Quantum Turbo", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="iOS 26 Quantum State Desk", layout="wide", initial_sidebar_state="expanded")
 
 # --- iOS 26 High-Fidelity Style Engine ---
 THEMES = {
@@ -35,7 +35,7 @@ st.sidebar.markdown("---")
 st.sidebar.header("🧮 Position Risk Engine")
 account_balance = st.sidebar.number_input("Account Balance:", min_value=10.0, value=1000.0, step=100.0)
 risk_percentage = st.sidebar.slider("Risk per Trade (%):", min_value=0.25, max_value=5.0, value=1.0, step=0.25)
-stop_loss_distance = st.sidebar.number_input("Stop Distance (Points):", min_value=0.01, value=1.50, step=0.10)
+stop_loss_distance = st.sidebar.number_input("Stop Distance (Points/Cents):", min_value=0.01, value=1.00, step=0.10)
 risk_reward_ratio = st.sidebar.slider("Risk:Reward Ratio Target:", min_value=1.0, max_value=5.0, value=2.0, step=0.5)
 
 cash_risk = account_balance * (risk_percentage / 100.0)
@@ -62,17 +62,14 @@ primary_period = period_map[primary_interval]
 # Master screening watch list
 SCREENER_POOL = ["AAPL", "TSLA", "NVDA", "MSFT", "AMZN", "GOOGL", "META", "AMD", "EURUSD=X", "GBPUSD=X", "BTC-USD"]
 
-# --- High-Velocity Batch Data Fetching ---
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=15)
 def fetch_all_market_data(tickers, period, interval):
     try:
-        # Pulls ALL tickers down in ONE unified parallel request frame
         data = yf.download(tickers=tickers, period=period, interval=interval, group_by='ticker', auto_adjust=True)
         return data
     except:
         return pd.DataFrame()
 
-# Vectorized ADX math
 def calculate_adx_fast(df, period=14):
     df = df.copy()
     df['H-L'] = df['High'] - df['Low']
@@ -96,20 +93,17 @@ def calculate_adx_fast(df, period=14):
     return df['ADX']
 
 st.title(" Quantum Automated Radar & Screener")
-st.caption(f"Engine Profile: **{selected_theme}** // Execution Framework: High-Velocity Batch Matrix")
+st.caption(f"Engine Profile: **{selected_theme}** // Mode: Active Regime Tracking")
 st.markdown("---")
 
 st.subheader("🕵️‍♂️ Real-Time Asset Screening Radar")
 
-# Trigger the batch fetch
 batch_data = fetch_all_market_data(SCREENER_POOL, primary_period, primary_interval)
-
 screener_results = []
 
 if not batch_data.empty:
     for ticker in SCREENER_POOL:
         try:
-            # Instantly slice the data out of RAM instead of hitting the internet again
             if ticker in batch_data.columns.levels[0]:
                 df = batch_data[ticker].dropna(how='all')
             else:
@@ -129,42 +123,46 @@ if not batch_data.empty:
                 df['VWAP'] = df['Close']
 
             latest = df.iloc[-1]
-            prev = df.iloc[-2]
-            
             price = latest['Close']
             adx_val = latest['ADX']
             
-            ema_buy = prev['EMA_9'] <= prev['EMA_21'] and latest['EMA_9'] > latest['EMA_21']
-            ema_sell = prev['EMA_9'] >= prev['EMA_21'] and latest['EMA_9'] < latest['EMA_21']
+            # UPGRADED: Continuous State Checks (No longer waiting for instantaneous cross)
+            is_bullish_trend = latest['EMA_9'] > latest['EMA_21']
+            is_bearish_trend = latest['EMA_9'] < latest['EMA_21']
+            above_vwap = price > latest['VWAP']
+            below_vwap = price < latest['VWAP']
             
-            if adx_val < 25:
-                verdict = "⚠️ CHOP ZONE (No Trade)"
-                regime = "Sideways / Consolidation"
-            else:
-                regime = "Strong Trend Active"
-                if ema_buy and price > latest['VWAP']:
-                    verdict = "🟢 EXECUTE BUY"
-                elif ema_sell and price < latest['VWAP']:
-                    verdict = "🔴 EXECUTE SELL"
+            # Smooth out Chop Filter to 20
+            if adx_val < 20:
+                regime = "⚠️ Weak Trend / Chop"
+                if is_bullish_trend:
+                    verdict = "🟡 BULLISH BIAS (Low Vol)"
                 else:
-                    verdict = "⏳ Market Neutral"
+                    verdict = "🟡 BEARISH BIAS (Low Vol)"
+            else:
+                regime = "⚡ Strong Trend Active"
+                if is_bullish_trend and above_vwap:
+                    verdict = "🟢 BULLISH REGIME"
+                elif is_bearish_trend and below_vwap:
+                    verdict = "🔴 BEARISH REGIME"
+                else:
+                    verdict = "⏳ Neutral Consolidation"
                     
             screener_results.append({
                 "Asset": ticker,
                 "Price": f"${price:,.2f}" if "=X" not in ticker else f"{price:.4f}",
-                "Trend Strength (ADX)": f"{adx_val:.1f}",
-                "Market Regime": regime,
+                "Trend Power (ADX)": f"{adx_val:.1f}",
+                "Market Structure": regime,
                 "System Action": verdict
             })
         except:
             continue
 
-# Render output matrix
 if screener_results:
     screener_df = pd.DataFrame(screener_results)
     st.dataframe(screener_df, use_container_width=True, hide_index=True)
 else:
-    st.warning("No market asset branches synchronized during this cycle.")
+    st.warning("No market asset branches synchronized.")
 
 st.markdown("---")
 
@@ -186,23 +184,24 @@ if focus_ticker and not batch_data.empty and focus_ticker in batch_data.columns.
             df_focus['VWAP'] = df_focus['Close']
 
         latest_f = df_focus.iloc[-1]
-        prev_f = df_focus.iloc[-2]
         price_f = float(latest_f['Close'])
         adx_f = float(latest_f['ADX'])
         
-        ema_buy_f = prev_f['EMA_9'] <= prev_f['EMA_21'] and latest_f['EMA_9'] > latest_f['EMA_21']
-        ema_sell_f = prev_f['EMA_9'] >= prev_f['EMA_21'] and latest_f['EMA_9'] < latest_f['EMA_21']
+        # Focus View State Checks
+        is_bull_f = latest_f['EMA_9'] > latest_f['EMA_21']
+        is_bear_f = latest_f['EMA_9'] < latest_f['EMA_21']
+        above_vwap_f = price_f > latest_f['VWAP']
+        below_vwap_f = price_f < latest_f['VWAP']
         
-        active_trade = False
+        active_trade = True  # Always calculate targets if a directional bias exists!
         sl_level, tp_level = 0.0, 0.0
         
-        if adx_f >= 25:
-            if ema_buy_f and price_f > latest_f['VWAP']:
-                active_trade = True
-                sl_level, tp_level = price_f - stop_loss_distance, price_f + take_profit_distance
-            elif ema_sell_f and price_f < latest_f['VWAP']:
-                active_trade = True
-                sl_level, tp_level = price_f + stop_loss_distance, price_f - take_profit_distance
+        if is_bull_f:
+            direction_text = "🟢 ACTIVE BULLISH BIAS"
+            sl_level, tp_level = price_f - stop_loss_distance, price_f + take_profit_distance
+        else:
+            direction_text = "🔴 ACTIVE BEARISH BIAS"
+            sl_level, tp_level = price_f + stop_loss_distance, price_f - take_profit_distance
 
         # UI Rendering
         st.markdown(f'<div style="{theme["card_style"]}">', unsafe_allow_html=True)
@@ -212,19 +211,14 @@ if focus_ticker and not batch_data.empty and focus_ticker in batch_data.columns.
         with c2:
             st.metric("ADX Power Metric", f"{adx_f:.1f}")
         with c3:
-            if adx_f < 25:
-                st.error("🔒 SYSTEM LOCKED: CHOP REGIME")
-            elif active_trade:
-                st.success("🔓 SIGNAL UNLOCKED: ENTRY VALID")
+            if adx_f < 20:
+                st.warning("⚠️ CHOP REGIME (Trade Carefully)")
             else:
-                st.info("⏳ STANDBY: LOOKING FOR TREND CROSS")
+                st.success("🔓 TREND REGIME UNLOCKED")
 
-        if active_trade:
-            st.markdown(f"🎯 **Target Profit (TP) Level:** `{tp_level:.4f}`")
-            st.markdown(f"🛡️ **Stop Loss (SL) Level:** `{sl_level:.4f}`")
-        else:
-            st.markdown("🎯 **Target Profit (TP):** `Execution rules suspended or no signal active`")
-            st.markdown("🛡️ **Stop Loss (SL):** `Execution rules suspended or no signal active`")
+        st.markdown(f"📊 **Current Vector State:** `{direction_text}`")
+        st.markdown(f"🎯 **Target Profit (TP) Level:** `{tp_level:.4f}`")
+        st.markdown(f"🛡️ **Stop Loss (SL) Level:** `{sl_level:.4f}`")
 
         # Plotly Engine Canvas
         fig = go.Figure()
@@ -236,12 +230,12 @@ if focus_ticker and not batch_data.empty and focus_ticker in batch_data.columns.
         fig.add_trace(go.Scatter(x=df_focus.index, y=df_focus['EMA_21'], mode='lines', line=dict(color=theme['ema21'], width=1.5), name="EMA 21"))
         fig.add_trace(go.Scatter(x=df_focus.index, y=df_focus['VWAP'], mode='lines', line=dict(color='orange', width=1, dash='dash'), name="VWAP"))
         
-        if active_trade:
-            fig.add_hline(y=tp_level, line_dash="dash", line_color="#30d158", line_width=2)
-            fig.add_hline(y=sl_level, line_dash="dash", line_color="#ff453a", line_width=2)
+        # Always draw the visual lines so your screen stays populated with real data
+        fig.add_hline(y=tp_level, line_dash="dash", line_color="#30d158", line_width=2, annotation_text="TP Target")
+        fig.add_hline(y=sl_level, line_dash="dash", line_color="#ff453a", line_width=2, annotation_text="SL Target")
 
         fig.update_layout(
-            height=300, margin=dict(l=0, r=0, t=5, b=0), xaxis_rangeslider_visible=False,
+            height=320, margin=dict(l=0, r=0, t=5, b=0), xaxis_rangeslider_visible=False,
             paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
             xaxis=dict(showgrid=False), yaxis=dict(showgrid=True, gridcolor=theme['grid'])
         )
