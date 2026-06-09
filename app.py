@@ -5,7 +5,7 @@ import numpy as np
 import plotly.graph_objects as go
 
 # Premium app config
-st.set_page_config(page_title="iOS 26 Quantum Max", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="iOS 26 Quantum Screener Max", layout="wide", initial_sidebar_state="expanded")
 
 # --- iOS 26 High-Fidelity Style Engine ---
 THEMES = {
@@ -26,34 +26,17 @@ selected_theme = st.sidebar.selectbox("Matrix Style:", list(THEMES.keys()))
 theme = THEMES[selected_theme]
 st.markdown(f"<style>{theme['bg_css']}</style>", unsafe_allow_html=True)
 
-# --- MANUAL REFRESH (Prevents API IP Bans) ---
-if st.sidebar.button("🔄 Force Data Sync", use_container_width=True):
-    pass # Streamlit natively reruns the whole script when a button is clicked
+if st.sidebar.button("🔄 Force Market Scan", use_container_width=True):
+    st.cache_data.clear()
 
 st.sidebar.markdown("---")
-st.sidebar.header("🗂️ Asset Routing")
-search_mode = st.sidebar.radio("Navigation:", ["Preset Library", "Manual Entry"])
 
-ASSET_LIBRARIES = {
-    "🇺🇸 Tech Giants": ["AAPL", "TSLA", "NVDA", "MSFT", "AMZN"],
-    "🌍 Global Indices": ["^GSPC", "^IXIC", "^FTSE", "^GDAXI"],
-    "💱 Forex Markets": ["EURUSD=X", "GBPUSD=X", "USDJPY=X"],
-    "🪙 Crypto Markets": ["BTC-USD", "ETH-USD"]
-}
-
-if search_mode == "Preset Library":
-    library_choice = st.sidebar.selectbox("Asset Class:", list(ASSET_LIBRARIES.keys()))
-    tickers = ASSET_LIBRARIES[library_choice]
-else:
-    custom_input = st.sidebar.text_input("Custom Tickers (comma split):", "AAPL, NVDA")
-    tickers = [t.strip().upper() for t in custom_input.split(",") if t.strip()]
-
-st.sidebar.markdown("---")
-st.sidebar.header("🧮 Advanced Risk Engine")
+# --- Advanced Risk Engine Widget ---
+st.sidebar.header("🧮 Position Risk Engine")
 account_balance = st.sidebar.number_input("Account Balance:", min_value=10.0, value=1000.0, step=100.0)
 risk_percentage = st.sidebar.slider("Risk per Trade (%):", min_value=0.25, max_value=5.0, value=1.0, step=0.25)
-stop_loss_distance = st.sidebar.number_input("Stop Distance (Pts):", min_value=0.01, value=1.50, step=0.10)
-risk_reward_ratio = st.sidebar.slider("Risk:Reward Ratio:", min_value=1.0, max_value=5.0, value=2.0, step=0.5)
+stop_loss_distance = st.sidebar.number_input("Stop Distance (Points):", min_value=0.01, value=1.50, step=0.10)
+risk_reward_ratio = st.sidebar.slider("Risk:Reward Ratio Target:", min_value=1.0, max_value=5.0, value=2.0, step=0.5)
 
 cash_risk = account_balance * (risk_percentage / 100.0)
 exact_position_size = cash_risk / stop_loss_distance
@@ -62,156 +45,196 @@ take_profit_distance = stop_loss_distance * risk_reward_ratio
 
 st.sidebar.markdown(f"""
 <div style="background: rgba(10, 132, 255, 0.1); border-radius: 12px; padding: 12px; border: 1px solid rgba(10, 132, 255, 0.2);">
-    <small style="color: gray; display:block;">MAX RISK (LOSS)</small>
+    <small style="color: gray; display:block;">MAX RISK LIMIT</small>
     <b style="font-size: 1.1rem; color: #ff453a;">-${cash_risk:.2f}</b><br>
     <small style="color: gray; display:block; margin-top: 6px;">TARGET REWARD</small>
     <b style="font-size: 1.1rem; color: #30d158;">+${projected_profit:.2f}</b><br>
-    <small style="color: gray; display:block; margin-top: 6px;">POSITION SIZE</small>
+    <small style="color: gray; display:block; margin-top: 6px;">CFD POSITION SIZE</small>
     <b style="font-size: 1.1rem; color: #0a84ff;">{exact_position_size:.2f} Units</b>
 </div>
 """, unsafe_allow_html=True)
 
 st.sidebar.markdown("---")
-primary_interval = st.sidebar.selectbox("Chart Interval:", ["5m", "15m", "1h", "1d"], index=1)
-period_map = {"5m": "5d", "15m": "5d", "1h": "1mo", "1d": "1y"} # Safer lookback periods
+primary_interval = st.sidebar.selectbox("Analysis Interval:", ["5m", "15m", "1h", "1d"], index=1)
+period_map = {"5m": "5d", "15m": "5d", "1h": "1mo", "1d": "1y"}
 primary_period = period_map[primary_interval]
 
-st.title(" Quantum Multi-Radar Platform")
-st.caption(f"Engine Profile: **{selected_theme}** // Standby Mode (Manual Sync Active)")
-st.markdown("---")
+# --- Native Math Function: ADX Engine ---
+def calculate_adx(df, period=14):
+    df = df.copy()
+    df['H-L'] = df['High'] - df['Low']
+    df['H-Cp'] = (df['High'] - df['Close'].shift(1)).abs()
+    df['L-Cp'] = (df['Low'] - df['Close'].shift(1)).abs()
+    df['TR'] = df[['H-L', 'H-Cp', 'L-Cp']].max(axis=1)
+    
+    df['plus_DM'] = df['High'].diff()
+    df['minus_DM'] = df['Low'].diff() * -1
+    
+    df['plus_DM'] = np.where((df['plus_DM'] > df['minus_DM']) & (df['plus_DM'] > 0), df['plus_DM'], 0)
+    df['minus_DM'] = np.where((df['minus_DM'] > df['plus_DM']) & (df['minus_DM'] > 0), df['minus_DM'], 0)
+    
+    df['TR_smooth'] = df['TR'].ewm(alpha=1/period, adjust=False).mean()
+    df['plus_DM_smooth'] = df['plus_DM'].ewm(alpha=1/period, adjust=False).mean()
+    df['minus_DM_smooth'] = df['minus_DM'].ewm(alpha=1/period, adjust=False).mean()
+    
+    df['plus_DI'] = 100 * (df['plus_DM_smooth'] / (df['TR_smooth'] + 1e-10))
+    df['minus_DI'] = 100 * (df['minus_DM_smooth'] / (df['TR_smooth'] + 1e-10))
+    
+    df['DX'] = 100 * (df['plus_DI'] - df['minus_DI']).abs() / (df['plus_DI'] + df['minus_DI'] + 1e-10)
+    df['ADX'] = df['DX'].ewm(alpha=1/period, adjust=False).mean()
+    return df['ADX']
 
-# Helper function with safety wrappers
-@st.cache_data(ttl=60) # Caches data for 60 seconds to prevent API bans
+@st.cache_data(ttl=60)
 def fetch_safe_data(ticker_id, p, i):
     try:
-        data = yf.Ticker(ticker_id).history(period=p, interval=i)
-        return data
+        return yf.Ticker(ticker_id).history(period=p, interval=i)
     except:
         return pd.DataFrame()
 
-def calculate_tf_signal(ticker_id, tf_interval, tf_period):
-    data = fetch_safe_data(ticker_id, tf_period, tf_interval)
-    if data.empty or len(data) < 22:
-        return "⏳"
-    e9 = data['Close'].ewm(span=9, adjust=False).mean().iloc[-1]
-    e21 = data['Close'].ewm(span=21, adjust=False).mean().iloc[-1]
-    return "🟢" if e9 > e21 else "🔴"
+# Master screening list
+SCREENER_POOL = ["AAPL", "TSLA", "NVDA", "MSFT", "AMZN", "GOOGL", "META", "AMD", "EURUSD=X", "GBPUSD=X", "BTC-USD"]
 
-cols = st.columns(len(tickers))
+st.title(" Quantum Automated Radar & Screener")
+st.caption(f"Engine Profile: **{selected_theme}** // ADX Filter: Active")
+st.markdown("---")
 
-for i, ticker in enumerate(tickers):
-    with cols[i]:
-        clean_name = ticker.replace("^", "").replace("=X", "")
-        st.markdown(f'<div style="{theme["card_style"]}">', unsafe_allow_html=True)
-        st.markdown(f"### {clean_name}")
-        
-        # Safe Data Fetching
+# --- UPGRADE 2 & 3: Background Screener Matrix with ADX Regime Control ---
+st.subheader("🕵️‍♂️ Real-Time Asset Screening Radar")
+
+screener_results = []
+
+with st.spinner("Scanning core asset library variables..."):
+    for ticker in SCREENER_POOL:
         df = fetch_safe_data(ticker, primary_period, primary_interval)
-        
-        # SAFETY CHECK: Does the asset have enough data to do math?
         if df.empty or len(df) < 30:
-            st.warning("Insufficient or closed market data.")
-            st.markdown('</div>', unsafe_allow_html=True)
             continue
             
-        try:
-            # Core Math
-            df['EMA_9'] = df['Close'].ewm(span=9, adjust=False).mean()
-            df['EMA_21'] = df['Close'].ewm(span=21, adjust=False).mean()
-            
-            delta = df['Close'].diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-            rs = gain / (loss + 1e-10)
-            df['RSI'] = 100 - (100 / (1 + rs))
-            
-            df['EMA_12'] = df['Close'].ewm(span=12, adjust=False).mean()
-            df['EMA_26'] = df['Close'].ewm(span=26, adjust=False).mean()
-            df['MACD'] = df['EMA_12'] - df['EMA_26']
-            df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean()
-            
-            # Safe VWAP
-            if 'Volume' in df.columns and df['Volume'].sum() > 0:
-                typical_price = (df['High'] + df['Low'] + df['Close']) / 3
-                df['VWAP'] = (typical_price * df['Volume']).cumsum() / df['Volume'].cumsum()
-                latest_vwap = df['VWAP'].iloc[-1]
-                vwap_str = f"${latest_vwap:.2f}"
+        # Run Mathematical Pipeline
+        df['EMA_9'] = df['Close'].ewm(span=9, adjust=False).mean()
+        df['EMA_21'] = df['Close'].ewm(span=21, adjust=False).mean()
+        df['ADX'] = calculate_adx(df)
+        
+        # VWAP
+        if 'Volume' in df.columns and df['Volume'].sum() > 0:
+            typical_price = (df['High'] + df['Low'] + df['Close']) / 3
+            df['VWAP'] = (typical_price * df['Volume']).cumsum() / df['Volume'].cumsum()
+        else:
+            df['VWAP'] = df['Close']
+
+        latest = df.iloc[-1]
+        prev = df.iloc[-2]
+        
+        price = latest['Close']
+        adx_val = latest['ADX']
+        
+        # Raw Signal Conditions
+        ema_buy = prev['EMA_9'] <= prev['EMA_21'] and latest['EMA_9'] > latest['EMA_21']
+        ema_sell = prev['EMA_9'] >= prev['EMA_21'] and latest['EMA_9'] < latest['EMA_21']
+        
+        # Regime Verification (ADX Filter)
+        if adx_val < 25:
+            verdict = "⚠️ CHOP ZONE (No Trade)"
+            regime = "Sideways / Consolidation"
+        else:
+            regime = "Strong Trend Active"
+            if ema_buy and price > latest['VWAP']:
+                verdict = "🟢 EXECUTE BUY"
+            elif ema_sell and price < latest['VWAP']:
+                verdict = "🔴 EXECUTE SELL"
             else:
-                df['VWAP'] = df['Close']
-                vwap_str = "N/A"
+                verdict = "⏳ Market Neutral"
+                
+        screener_results.append({
+            "Asset": ticker,
+            "Price": f"${price:,.2f}" if "=X" not in ticker else f"{price:.4f}",
+            "Trend Strength (ADX)": f"{adx_val:.1f}",
+            "Market Regime": regime,
+            "System Action": verdict
+        })
 
-            latest = df.iloc[-1]
-            prev = df.iloc[-2]
-            
-            price = float(latest['Close'])
-            rsi_val = float(latest['RSI'])
-            macd, macd_sig = float(latest['MACD']), float(latest['Signal_Line'])
-            
-            # Safe Confluence Check
-            sig_1h = calculate_tf_signal(ticker, "1h", "1mo")
-            sig_1d = calculate_tf_signal(ticker, "1d", "1y")
-            
-            # Entry Filters
-            ema_buy = prev['EMA_9'] <= prev['EMA_21'] and latest['EMA_9'] > latest['EMA_21']
-            vwap_buy_filter = price > latest['VWAP']
-            
-            ema_sell = prev['EMA_9'] >= prev['EMA_21'] and latest['EMA_9'] < latest['EMA_21']
-            vwap_sell_filter = price < latest['VWAP']
+# Render background scan output matrix
+screener_df = pd.DataFrame(screener_results)
+st.dataframe(screener_df, use_container_width=True, hide_index=True)
 
-            active_trade = False
-            sl_level, tp_level = 0.0, 0.0
+st.markdown("---")
 
-            if (ema_buy and (macd > macd_sig) and vwap_buy_filter) or (pd.notna(rsi_val) and rsi_val < 35):
-                status_color, status_text = "green", "EXECUTE BUY 🟢"
+# --- Focus Viewport Selection ---
+st.subheader("🔍 Deep-Dive Diagnostic Canvas")
+focus_ticker = st.selectbox("Select screened asset to chart and pull risk targets:", SCREENER_POOL)
+
+if focus_ticker:
+    df_focus = fetch_safe_data(focus_ticker, primary_period, primary_interval)
+    if not df_focus.empty and len(df_focus) >= 30:
+        df_focus['EMA_9'] = df_focus['Close'].ewm(span=9, adjust=False).mean()
+        df_focus['EMA_21'] = df_focus['Close'].ewm(span=21, adjust=False).mean()
+        df_focus['ADX'] = calculate_adx(df_focus)
+        
+        if 'Volume' in df_focus.columns and df_focus['Volume'].sum() > 0:
+            typical_price = (df_focus['High'] + df_focus['Low'] + df_focus['Close']) / 3
+            df_focus['VWAP'] = (typical_price * df_focus['Volume']).cumsum() / df_focus['Volume'].cumsum()
+        else:
+            df_focus['VWAP'] = df_focus['Close']
+
+        latest_f = df_focus.iloc[-1]
+        prev_f = df_focus.iloc[-2]
+        price_f = float(latest_f['Close'])
+        adx_f = float(latest_f['ADX'])
+        
+        ema_buy_f = prev_f['EMA_9'] <= prev_f['EMA_21'] and latest_f['EMA_9'] > latest_f['EMA_21']
+        ema_sell_f = prev_f['EMA_9'] >= prev_f['EMA_21'] and latest_f['EMA_9'] < latest_f['EMA_21']
+        
+        active_trade = False
+        sl_level, tp_level = 0.0, 0.0
+        
+        # Trigger conditions only valid if ADX trend metric is strong
+        if adx_f >= 25:
+            if ema_buy_f and price_f > latest_f['VWAP']:
                 active_trade = True
-                sl_level, tp_level = price - stop_loss_distance, price + take_profit_distance
-            elif (ema_sell and (macd < macd_sig) and vwap_sell_filter) or (pd.notna(rsi_val) and rsi_val > 65):
-                status_color, status_text = "red", "EXECUTE SELL 🔴"
+                sl_level, tp_level = price_f - stop_loss_distance, price_f + take_profit_distance
+            elif ema_sell_f and price_f < latest_f['VWAP']:
                 active_trade = True
-                sl_level, tp_level = price + stop_loss_distance, price - take_profit_distance
-            else:
-                status_color, status_text = "gray", "MARKET NEUTRAL ⏳"
-            
-            display_price = f"{price:.4f}" if "=X" in ticker else f"${price:,.2f}"
-            st.metric(label=f"Primary Close ({primary_interval})", value=display_price)
-            st.markdown(f"**Verdict:** :{status_color}[{status_text}]")
-            
-            st.markdown(f"""
-            <div style="background: rgba(255,255,255,0.03); border-radius: 10px; padding: 10px; margin-top: 10px; margin-bottom: 10px; font-size: 0.82rem;">
-                <b style="display:block; margin-bottom: 4px; color:gray;">Macro Confluence:</b>
-                📊 1h: {sig_1h} | 🗺️ 1d: {sig_1d}
-            </div>
-            """, unsafe_allow_html=True)
-            
-            if active_trade:
-                st.markdown(f"🎯 **Target Profit (TP):** `{tp_level:.4f}`")
-                st.markdown(f"🛡️ **Stop Loss (SL):** `{sl_level:.4f}`")
-            else:
-                st.markdown("🎯 **Target Profit (TP):** `Waiting...`")
-                st.markdown("🛡️ **Stop Loss (SL):** `Waiting...`")
-            
-            # Plotly Charting
-            fig = go.Figure()
-            fig.add_trace(go.Candlestick(
-                x=df.index, open=df['Open'], high=df['High'], low=df['Low'], close=df['Close'],
-                name="Price", increasing_line_color=theme['down_color'], decreasing_line_color=theme['up_color']
-            ))
-            fig.add_trace(go.Scatter(x=df.index, y=df['EMA_9'], mode='lines', line=dict(color=theme['ema9'], width=1.5)))
-            fig.add_trace(go.Scatter(x=df.index, y=df['EMA_21'], mode='lines', line=dict(color=theme['ema21'], width=1.5)))
-            
-            if active_trade:
-                fig.add_hline(y=tp_level, line_dash="dash", line_color="#30d158", line_width=2)
-                fig.add_hline(y=sl_level, line_dash="dash", line_color="#ff453a", line_width=2)
+                sl_level, tp_level = price_f + stop_loss_distance, price_f - take_profit_distance
 
-            fig.update_layout(
-                height=240, margin=dict(l=0, r=0, t=5, b=0), xaxis_rangeslider_visible=False, showlegend=False,
-                paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                xaxis=dict(showgrid=False), yaxis=dict(showgrid=True, gridcolor=theme['grid'])
-            )
-            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-            
-        except Exception as e:
-            # This is the crucial fix: It will now tell you exactly what line of math is failing
-            st.error(f"Calculation Error: {str(e)}")
-            
+        # Visual Interface Rendering
+        st.markdown(f'<div style="{theme["card_style"]}">', unsafe_allow_html=True)
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.metric("Focus Price", f"${price_f:,.2f}" if "=X" not in focus_ticker else f"{price_f:.4f}")
+        with c2:
+            st.metric("ADX Power Metric", f"{adx_f:.1f}")
+        with c3:
+            if adx_f < 25:
+                st.error("🔒 SYSTEM LOCKED: CHOP REGIME")
+            elif active_trade:
+                st.success("🔓 SIGNAL UNLOCKED: ENTRY VALID")
+            else:
+                st.info("⏳ STANDBY: LOOKING FOR TREND CROSS")
+
+        if active_trade:
+            st.markdown(f"🎯 **Target Profit (TP) Level:** `{tp_level:.4f}`")
+            st.markdown(f"🛡️ **Stop Loss (SL) Level:** `{sl_level:.4f}`")
+        else:
+            st.markdown("🎯 **Target Profit (TP):** `Execution rules suspended or no signal active`")
+            st.markdown("🛡️ **Stop Loss (SL):** `Execution rules suspended or no signal active`")
+
+        # Plotly Canvas
+        fig = go.Figure()
+        fig.add_trace(go.Candlestick(
+            x=df_focus.index, open=df_focus['Open'], high=df_focus['High'], low=df_focus['Low'], close=df_focus['Close'],
+            increasing_line_color=theme['down_color'], decreasing_line_color=theme['up_color'], name="Price"
+        ))
+        fig.add_trace(go.Scatter(x=df_focus.index, y=df_focus['EMA_9'], mode='lines', line=dict(color=theme['ema9'], width=1.5), name="EMA 9"))
+        fig.add_trace(go.Scatter(x=df_focus.index, y=df_focus['EMA_21'], mode='lines', line=dict(color=theme['ema21'], width=1.5), name="EMA 21"))
+        fig.add_trace(go.Scatter(x=df_focus.index, y=df_focus['VWAP'], mode='lines', line=dict(color='orange', width=1, dash='dash'), name="VWAP"))
+        
+        if active_trade:
+            fig.add_hline(y=tp_level, line_dash="dash", line_color="#30d158", line_width=2)
+            fig.add_hline(y=sl_level, line_dash="dash", line_color="#ff453a", line_width=2)
+
+        fig.update_layout(
+            height=300, margin=dict(l=0, r=0, t=5, b=0), xaxis_rangeslider_visible=False,
+            paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+            xaxis=dict(showgrid=False), yaxis=dict(showgrid=True, gridcolor=theme['grid'])
+        )
+        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
         st.markdown('</div>', unsafe_allow_html=True)
